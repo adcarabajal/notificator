@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<mule-configuration xmlns="http://www.mulesoft.com/tooling/messageflow" name="MuleNotificator">
+    <global-element name="Property Placeholder" type="http://www.springframework.org/schema/context/property-placeholder" entity-id="Property Placeholder#1">
+        <properties>
+            <property name="properties-ref"/>
+            <property name="order"/>
+            <property name="location" value="classpath:notificator.properties"/>
+            <property name="local-override"/>
+            <property name="system-properties-mode"/>
+            <property name="file-encoding"/>
+            <property name="auxiliary;wrappedIn" value="beans@spring@http://www.springframework.org/schema/beans"/>
+            <property name="auxiliary;wrapIn" value="1"/>
+            <property name="auxiliary;index" value="2"/>
+            <property name="ignore-unresolvable"/>
+            <property name="ignore-resource-not-found"/>
+        </properties>
+    </global-element>
+    <global-unknown description="false" unknownName="notificator-nio-connector" index="3" entity-id="global-unknown#1">
+        <content>&lt;nio-http:connector xmlns:nio-http=&quot;http://www.mulesoft.org/schema/mule/nio-http&quot; name=&quot;notificator-nio-connector&quot;&gt;
+        &lt;receiver-threading-profile xmlns=&quot;http://www.mulesoft.org/schema/mule/core&quot; maxThreadsActive=&quot;${habitat.nio.maxThreadsActive}&quot; maxThreadsIdle=&quot;${habitat.nio.maxThreadsIdle}&quot; threadTTL=&quot;${habitat.nio.threadTTL}&quot; threadWaitTimeout=&quot;${habitat.nio.threadWaitTimeout}&quot; maxBufferSize=&quot;${habitat.nio.maxBufferSize}&quot;/&gt;
+        &lt;dispatcher-threading-profile xmlns=&quot;http://www.mulesoft.org/schema/mule/core&quot; maxThreadsActive=&quot;${habitat.nio.maxThreadsActive}&quot; maxThreadsIdle=&quot;${habitat.nio.maxThreadsIdle}&quot; threadTTL=&quot;${habitat.nio.threadTTL}&quot; threadWaitTimeout=&quot;${habitat.nio.threadWaitTimeout}&quot; maxBufferSize=&quot;${habitat.nio.maxBufferSize}&quot;/&gt;
+    &lt;/nio-http:connector&gt;</content>
+    </global-unknown>
+    <global-element name="ObjectStore" type="http://www.mulesoft.org/schema/mule/objectstore/config" entity-id="ObjectStore#1">
+        <properties>
+            <property name="partition"/>
+            <property name="persistent" value="true"/>
+            <property name="name" value="ObjectStore"/>
+            <property name="objectStore-ref"/>
+            <property name="auxiliary;index" value="6"/>
+        </properties>
+    </global-element>
+    <flow SubFlow="false" name="notificator-websocket" entity-id="9c3bebf5-7f41-4eaf-84e0-498e0129fa78">
+        <properties>
+            <property name="processingStrategy" value="synchronous"/>
+            <property name="processingStrategy2" value="synchronous"/>
+            <property name="bussinessEventsLabel"/>
+            <property name="tracking:enable-default-events"/>
+            <property name="auxiliary;index" value="7"/>
+        </properties>
+        <lane hadOnlyOneElement="false" index="0" isChoiceOtherwiseLane="false" entity-id="compartment-lane#1">
+            <graphicalData x="0" y="0" width="0" height="0"/>
+            <unknown description="false" index="8" entity-id="unknown#1">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <content>&lt;nio-http:inbound-endpoint xmlns:nio-http=&quot;http://www.mulesoft.org/schema/mule/nio-http&quot; host=&quot;localhost&quot; port=&quot;${http.port}&quot; connector-ref=&quot;notificator-nio-connector&quot; mimeType=&quot;application/json&quot;&gt;
+            &lt;not-filter xmlns=&quot;http://www.mulesoft.org/schema/mule/core&quot;&gt;
+                &lt;wildcard-filter pattern=&quot;/favicon.ico&quot;/&gt;
+            &lt;/not-filter&gt;
+            &lt;nio-http:websocket path=&quot;ws.notificator.channel&quot;/&gt;
+        &lt;/nio-http:inbound-endpoint&gt;</content>
+            </unknown>
+            <pattern name="Logger" type="http://www.mulesoft.org/schema/mule/core/logger" entity-id="Logger#1">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="message" value="channel ID: #[header:INBOUND:nio.channel.id] sent: #[payload:java.lang.String]"/>
+                    <property name="category"/>
+                    <property name="level" value="INFO"/>
+                    <property name="auxiliary;index" value="12"/>
+                </properties>
+            </pattern>
+            <pattern name="Variable" type="http://www.mulesoft.org/schema/mule/core/variable-transformer" entity-id="Variable#1">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="variableName" value="nioChannelId"/>
+                    <property name="value" value="#[message.inboundProperties['nio.channel.id']]"/>
+                    <property name="org.mule.tooling.ui.modules.core.widgets.meta.ModeAttribute" value="http://www.mulesoft.org/schema/mule/core/set-variable"/>
+                    <property name="auxiliary;index" value="13"/>
+                </properties>
+            </pattern>
+            <splitter index="14" name="Choice" type="org.mule.tooling.ui.modules.core.pattern.cbr" entity-id="Choice#1">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name=";INDEX" value="14"/>
+                    <property-collection name="442a9f5c-1295-48c3-a948-078d2453638e">
+                        <property name="choice.expression" value="#[payload == &quot;/ws/notificator/channel&quot;]"/>
+                        <property-collection name="choice.attributes">
+                            <property name="expression" value="#[payload == &quot;/ws/notificator/channel&quot;]"/>
+                        </property-collection>
+                    </property-collection>
+                    <property-collection name="d2fb059e-b1e3-4d3d-a1d3-46a3b612ba02">
+                        <property name="choice.otherwise" value="true"/>
+                        <property-collection name="choice.attributes"/>
+                    </property-collection>
+                </properties>
+                <pattern name="Choice" type="org.mule.tooling.ui.modules.core.pattern.cbr" entity-id="Choice#2">
+                    <properties>
+                        <property name=";INDEX" value="14"/>
+                        <property-collection name="442a9f5c-1295-48c3-a948-078d2453638e">
+                            <property name="choice.expression" value="#[payload == &quot;/ws/notificator/channel&quot;]"/>
+                            <property-collection name="choice.attributes">
+<property name="expression" value="#[payload == &quot;/ws/notificator/channel&quot;]"/>
+                            </property-collection>
+                        </property-collection>
+                        <property-collection name="d2fb059e-b1e3-4d3d-a1d3-46a3b612ba02">
+                            <property name="choice.otherwise" value="true"/>
+                            <property-collection name="choice.attributes"/>
+                        </property-collection>
+                    </properties>
+                </pattern>
+                <compartment entity-id="compartment#1">
+                    <lane hadOnlyOneElement="false" index="16" isChoiceOtherwiseLane="false" entity-id="442a9f5c-1295-48c3-a948-078d2453638e">
+                        <pattern name="HTTP Response Builder" type="http://www.mulesoft.org/schema/mule/http/response-builder" entity-id="HTTP Response Builder#1">
+                            <graphicalData x="0" y="0" width="0" height="0"/>
+                            <properties>
+<property name="auxiliary;erased;contentType" value="true"/>
+<property name="cookiesLabel" value=""/>
+<property name="updated"/>
+<property name="status" value="200"/>
+<property name="value" value=""/>
+<property name="contentType" value=""/>
+<property name="auxiliary;index" value="16"/>
+<property-collection name="@http://www.mulesoft.org/schema/mule/http/cache-control;230178128">
+    <property name="isProcessed$$$$" value="true"/>
+</property-collection>
+<property-collection name="@http://www.mulesoft.org/schema/mule/http/expires;985749049">
+    <property name="value" value=""/>
+    <property name="isProcessed$$$$" value="true"/>
+</property-collection>
+<property-collection name="@http://www.mulesoft.org/schema/mule/http/location;1795413585">
+    <property name="isProcessed$$$$" value="true"/>
+</property-collection>
+                            </properties>
+                            <description></description>
+                        </pattern>
+                    </lane>
+                    <lane hadOnlyOneElement="false" index="18" isChoiceOtherwiseLane="true" entity-id="d2fb059e-b1e3-4d3d-a1d3-46a3b612ba02">
+                        <pattern name="Object to JSON" type="http://www.mulesoft.org/schema/mule/json/object-to-json-transformer" entity-id="Object to JSON#1">
+                            <graphicalData x="0" y="0" width="0" height="0"/>
+                            <properties>
+<property name="sourceClass"/>
+<property name="returnClass"/>
+<property name="ignoreBadInput"/>
+<property name="encoding"/>
+<property name="mapper-ref"/>
+<property name="mimeType"/>
+<property name="auxiliary;index" value="18"/>
+                            </properties>
+                        </pattern>
+                        <pattern name="Variable" type="http://www.mulesoft.org/schema/mule/core/variable-transformer" entity-id="Variable#2">
+                            <graphicalData x="0" y="0" width="0" height="0"/>
+                            <properties>
+<property name="variableName" value="event"/>
+<property name="value" value="#[json:event]"/>
+<property name="org.mule.tooling.ui.modules.core.widgets.meta.ModeAttribute" value="http://www.mulesoft.org/schema/mule/core/set-variable"/>
+<property name="auxiliary;index" value="19"/>
+                            </properties>
+                        </pattern>
+                        <splitter index="20" name="Choice" type="org.mule.tooling.ui.modules.core.pattern.cbr" entity-id="Choice#3">
+                            <graphicalData x="0" y="0" width="0" height="0"/>
+                            <properties>
+<property name=";INDEX" value="20"/>
+<property-collection name="6214ca5c-e452-4f79-a188-9a748ea19ada">
+    <property name="choice.otherwise" value="true"/>
+    <property-collection name="choice.attributes"/>
+</property-collection>
+<property-collection name="1ac90b1e-cf3b-4602-9694-6a2285b195f7">
+    <property name="choice.expression" value="#[flowVars['event'].contains('get-history')]"/>
+    <property-collection name="choice.attributes">
+        <property name="expression" value="#[flowVars['event'].contains('get-history')]"/>
+    </property-collection>
+</property-collection>
+                            </properties>
+                            <pattern name="Choice" type="org.mule.tooling.ui.modules.core.pattern.cbr" entity-id="Choice#4">
+<properties>
+    <property name=";INDEX" value="20"/>
+    <property-collection name="6214ca5c-e452-4f79-a188-9a748ea19ada">
+        <property name="choice.otherwise" value="true"/>
+        <property-collection name="choice.attributes"/>
+    </property-collection>
+    <property-collection name="1ac90b1e-cf3b-4602-9694-6a2285b195f7">
+        <property name="choice.expression" value="#[flowVars['event'].contains('get-history')]"/>
+        <property-collection name="choice.attributes">
+            <property name="expression" value="#[flowVars['event'].contains('get-history')]"/>
+        </property-collection>
+    </property-collection>
+</properties>
+                            </pattern>
+                            <compartment entity-id="compartment#2">
+<lane hadOnlyOneElement="false" index="22" isChoiceOtherwiseLane="false" entity-id="1ac90b1e-cf3b-4602-9694-6a2285b195f7">
+    <pattern name="Flow Reference" type="http://www.mulesoft.org/schema/mule/core/flow-ref" entity-id="Flow Reference#1">
+        <graphicalData x="0" y="0" width="0" height="0"/>
+        <properties>
+            <property name="name" value="notificator-cache"/>
+            <property name="auxiliary;index" value="22"/>
+        </properties>
+    </pattern>
+</lane>
+<lane hadOnlyOneElement="false" index="24" isChoiceOtherwiseLane="true" entity-id="6214ca5c-e452-4f79-a188-9a748ea19ada">
+    <pattern name="ObjectStore" type="http://www.mulesoft.org/schema/mule/objectstore/objectstore-connector" entity-id="ObjectStore#2">
+        <graphicalData x="0" y="0" width="0" height="0"/>
+        <properties>
+            <property name="overwrite" value="true"/>
+            <property name="org.mule.tooling.ui.modules.core.widgets.meta.ModeAttribute" value="http://www.mulesoft.org/schema/mule/objectstore/store"/>
+            <property name="config-ref" value="ObjectStore"/>
+            <property name="value-ref" value="#[payload]"/>
+            <property name="key" value="#[header:INBOUND:nio.channel.id]"/>
+            <property name="auxiliary;index" value="24"/>
+        </properties>
+    </pattern>
+    <unknown description="false" index="25" entity-id="unknown#2">
+        <graphicalData x="0" y="0" width="0" height="0"/>
+        <content>&lt;nio-http:websocket-writer xmlns:nio-http=&quot;http://www.mulesoft.org/schema/mule/nio-http&quot; path=&quot;ws.notificator.channel&quot;/&gt;</content>
+    </unknown>
+</lane>
+                            </compartment>
+                        </splitter>
+                    </lane>
+                </compartment>
+            </splitter>
+        </lane>
+    </flow>
+    <flow SubFlow="false" name="notificator-disconnect" entity-id="bd427b18-a73a-40a0-b983-f667de559205">
+        <properties>
+            <property name="processingStrategy" value="synchronous"/>
+            <property name="processingStrategy2" value="synchronous"/>
+            <property name="bussinessEventsLabel"/>
+            <property name="tracking:enable-default-events"/>
+            <property name="auxiliary;index" value="26"/>
+        </properties>
+        <lane hadOnlyOneElement="false" index="0" isChoiceOtherwiseLane="false" entity-id="compartment-lane#2">
+            <graphicalData x="0" y="0" width="0" height="0"/>
+            <unknown description="false" index="27" entity-id="unknown#3">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <content>&lt;notification:custom-listener xmlns:notification=&quot;http://www.mulesoft.org/schema/mule/notification&quot; notification=&quot;org.mule.transport.nio.http.notifications.WebSocketNotification&quot; notificationListener=&quot;org.mule.transport.nio.http.notifications.WebSocketNotificationListener&quot; actionName=&quot;socket upgrade disconnect&quot;/&gt;</content>
+            </unknown>
+            <pattern name="Variable" type="http://www.mulesoft.org/schema/mule/core/variable-transformer" entity-id="Variable#3">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="variableName" value="nioChannelId"/>
+                    <property name="value" value="#[payload.channelId]"/>
+                    <property name="org.mule.tooling.ui.modules.core.widgets.meta.ModeAttribute" value="http://www.mulesoft.org/schema/mule/core/set-variable"/>
+                    <property name="auxiliary;index" value="28"/>
+                </properties>
+            </pattern>
+            <pattern name="Logger" type="http://www.mulesoft.org/schema/mule/core/logger" entity-id="Logger#2">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="message" value="Unsubscribing to all topics for subscriberId #[flowVars['nioChannelId']]"/>
+                    <property name="category"/>
+                    <property name="level" value="INFO"/>
+                    <property name="auxiliary;index" value="29"/>
+                </properties>
+            </pattern>
+            <pattern name="ObjectStore" type="http://www.mulesoft.org/schema/mule/objectstore/objectstore-connector" entity-id="ObjectStore#3">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="org.mule.tooling.ui.modules.core.widgets.meta.ModeAttribute" value="http://www.mulesoft.org/schema/mule/objectstore/retrieve"/>
+                    <property name="defaultValue-ref"/>
+                    <property name="config-ref" value="ObjectStore"/>
+                    <property name="key" value="#[flowVars['nioChannelId']]"/>
+                    <property name="auxiliary;index" value="30"/>
+                </properties>
+            </pattern>
+            <pattern name="Set Payload" type="http://www.mulesoft.org/schema/mule/core/set-payload" entity-id="Set Payload#1">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="value" value="{&quot;id&quot;:&quot;#[flowVars[&quot;nioChannelId&quot;]]&quot;, &quot;event&quot;:&quot;leaves-channel&quot;, &quot;data&quot;:#[json:data]}"/>
+                    <property name="auxiliary;index" value="31"/>
+                </properties>
+            </pattern>
+            <unknown description="false" index="32" entity-id="unknown#4">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <content>&lt;nio-http:websocket-writer xmlns:nio-http=&quot;http://www.mulesoft.org/schema/mule/nio-http&quot; path=&quot;ws.notificator.channel&quot;/&gt;</content>
+            </unknown>
+            <pattern name="ObjectStore" type="http://www.mulesoft.org/schema/mule/objectstore/objectstore-connector" entity-id="ObjectStore#4">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="ignoreNotExists"/>
+                    <property name="org.mule.tooling.ui.modules.core.widgets.meta.ModeAttribute" value="http://www.mulesoft.org/schema/mule/objectstore/remove"/>
+                    <property name="config-ref" value="ObjectStore"/>
+                    <property name="key" value="#[flowVars['nioChannelId']]"/>
+                    <property name="auxiliary;index" value="33"/>
+                </properties>
+            </pattern>
+        </lane>
+    </flow>
+    <flow SubFlow="false" name="notificator-cache" entity-id="bd256855-fffd-4842-bce4-22540f74cd95">
+        <properties>
+            <property name="processingStrategy"/>
+            <property name="processingStrategy2"/>
+            <property name="bussinessEventsLabel"/>
+            <property name="tracking:enable-default-events"/>
+            <property name="auxiliary;index" value="34"/>
+        </properties>
+        <lane hadOnlyOneElement="false" index="0" isChoiceOtherwiseLane="false" entity-id="compartment-lane#3">
+            <graphicalData x="0" y="0" width="0" height="0"/>
+            <pattern name="ObjectStore" type="http://www.mulesoft.org/schema/mule/objectstore/objectstore-connector" entity-id="ObjectStore#5">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="org.mule.tooling.ui.modules.core.widgets.meta.ModeAttribute" value="http://www.mulesoft.org/schema/mule/objectstore/all-keys"/>
+                    <property name="config-ref" value="ObjectStore"/>
+                    <property name="auxiliary;index" value="35"/>
+                </properties>
+            </pattern>
+            <scope name="For Each" type="http://www.mulesoft.org/schema/mule/core/foreach" entity-id="For Each#1">
+                <graphicalData x="0" y="0" width="0" height="0"/>
+                <properties>
+                    <property name="counterVariableName"/>
+                    <property name="rootMessageVariableName"/>
+                    <property name="batchSize"/>
+                    <property name="collection" value="#[payload]"/>
+                    <property name="auxiliary;index" value="36"/>
+                </properties>
+                <compartment entity-id="compartment#3">
+                    <lane hadOnlyOneElement="false" index="0" isChoiceOtherwiseLane="false" entity-id="compartment-lane#4">
+                        <pattern name="ObjectStore" type="http://www.mulesoft.org/schema/mule/objectstore/objectstore-connector" entity-id="ObjectStore#6">
+                            <graphicalData x="0" y="0" width="0" height="0"/>
+                            <properties>
+<property name="org.mule.tooling.ui.modules.core.widgets.meta.ModeAttribute" value="http://www.mulesoft.org/schema/mule/objectstore/retrieve"/>
+<property name="defaultValue-ref"/>
+<property name="config-ref" value="ObjectStore"/>
+<property name="key" value="#[payload]"/>
+<property name="auxiliary;index" value="37"/>
+                            </properties>
+                        </pattern>
+                        <unknown description="false" index="38" entity-id="unknown#5">
+                            <graphicalData x="0" y="0" width="0" height="0"/>
+                            <content>&lt;nio-http:websocket-writer xmlns:nio-http=&quot;http://www.mulesoft.org/schema/mule/nio-http&quot; path=&quot;ws.notificator.channel&quot; channelId=&quot;#[flowVars['nioChannelId']]&quot;/&gt;</content>
+                        </unknown>
+                    </lane>
+                </compartment>
+            </scope>
+        </lane>
+    </flow>
+    <description></description>
+</mule-configuration>

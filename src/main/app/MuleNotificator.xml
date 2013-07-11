@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:objectstore="http://www.mulesoft.org/schema/mule/objectstore" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" 
+xmlns:nio-http="http://www.mulesoft.org/schema/mule/nio-http" xmlns:context="http://www.springframework.org/schema/context" xmlns:notification="http://www.mulesoft.org/schema/mule/notification"
+xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:spring="http://www.springframework.org/schema/beans" version="EE-3.4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/nio-http http://www.mulesoft.org/schema/mule/nio-http/current/mule-nio-http.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.1.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/notification http://www.mulesoft.org/schema/mule/notification/current/mule-notification.xsd
+http://www.mulesoft.org/schema/mule/objectstore http://www.mulesoft.org/schema/mule/objectstore/1.0/mule-objectstore.xsd">
+
+	<spring:beans>
+        <context:property-placeholder location="classpath:notificator.properties"/>
+    </spring:beans>
+    
+	<nio-http:connector name="notificator-nio-connector">
+        <receiver-threading-profile maxThreadsActive="${habitat.nio.maxThreadsActive}" maxThreadsIdle="${habitat.nio.maxThreadsIdle}"
+                                    threadTTL="${habitat.nio.threadTTL}" threadWaitTimeout="${habitat.nio.threadWaitTimeout}"
+                                    maxBufferSize="${habitat.nio.maxBufferSize}"/>
+        <dispatcher-threading-profile maxThreadsActive="${habitat.nio.maxThreadsActive}" maxThreadsIdle="${habitat.nio.maxThreadsIdle}"
+                                      threadTTL="${habitat.nio.threadTTL}" threadWaitTimeout="${habitat.nio.threadWaitTimeout}"
+                                      maxBufferSize="${habitat.nio.maxBufferSize}"/>
+    </nio-http:connector>
+    <objectstore:config name="ObjectStore" persistent="true" doc:name="ObjectStore"/>
+    
+    <flow name="notificator-websocket" processingStrategy="synchronous" doc:name="notificator-websocket">
+         <nio-http:inbound-endpoint host="localhost" port="${http.port}" connector-ref="notificator-nio-connector" mimeType="application/json">
+            <not-filter>
+                <wildcard-filter pattern="/favicon.ico"/>
+            </not-filter>
+            <nio-http:websocket path="ws.notificator.channel" />
+        </nio-http:inbound-endpoint>
+        <!--  <logger level="INFO" message="Websocket #[header:INBOUND:http.websocket.version]" />-->
+        <logger level="INFO" message="channel ID: #[header:INBOUND:nio.channel.id] sent: #[payload:java.lang.String]" doc:name="Logger"/>
+        <set-variable variableName="nioChannelId" value="#[message.inboundProperties['nio.channel.id']]" doc:name="Variable"/>
+        
+        <choice doc:name="Choice">
+            <when expression="#[payload == &quot;/ws/notificator/channel&quot;]">
+                <http:response-builder doc:name="HTTP Response Builder" status="200"/>
+                
+                
+            </when>
+         	<otherwise>        
+		        <json:object-to-json-transformer doc:name="Object to JSON"/>
+		        <set-variable variableName="event" value="#[json:event]" doc:name="Variable" />
+		                
+		       	<choice doc:name="Choice">
+		            <when expression="#[flowVars['event'].contains('get-history')]">
+		                <flow-ref name="notificator-cache" doc:name="Flow Reference"/>
+		                
+		            </when>
+		         	<otherwise>
+		         		<objectstore:store overwrite="true" key="#[header:INBOUND:nio.channel.id]" value-ref="#[payload]" config-ref="ObjectStore"   doc:name="ObjectStore"/>
+		                <nio-http:websocket-writer path="ws.notificator.channel"/>
+		            </otherwise>
+		        </choice>   
+             </otherwise>
+        </choice>
+       
+    </flow>
+    
+    <flow name="notificator-disconnect" processingStrategy="synchronous" doc:name="notificator-disconnect">
+        <notification:custom-listener notification="org.mule.transport.nio.http.notifications.WebSocketNotification"
+                                      notificationListener="org.mule.transport.nio.http.notifications.WebSocketNotificationListener"
+                                      actionName="socket upgrade disconnect"/>
+        <set-variable variableName="nioChannelId" value="#[payload.channelId]" doc:name="Variable"/>
+        <logger level="INFO" message="Unsubscribing to all topics for subscriberId #[flowVars['nioChannelId']]" doc:name="Logger"/>
+        <objectstore:retrieve key="#[flowVars['nioChannelId']]" config-ref="ObjectStore" doc:name="ObjectStore"/>
+        <set-payload value='{"id":"#[flowVars["nioChannelId"]]", "event":"leaves-channel", "data":#[json:data]}' doc:name="Set Payload"/>
+        <nio-http:websocket-writer path="ws.notificator.channel"/> 
+        <objectstore:remove config-ref="ObjectStore" key="#[flowVars['nioChannelId']]" doc:name="ObjectStore"/>
+        
+    </flow>
+    
+    
+    <flow name="notificator-cache" doc:name="notificator-cache">
+    	<objectstore:all-keys config-ref="ObjectStore" doc:name="ObjectStore"/>
+        <foreach doc:name="For Each" collection="#[payload]">
+        	<objectstore:retrieve key="#[payload]" config-ref="ObjectStore" doc:name="ObjectStore"/>
+        	<nio-http:websocket-writer path="ws.notificator.channel" channelId="#[flowVars['nioChannelId']]"/>
+        </foreach>        
+    </flow>
+</mule>
