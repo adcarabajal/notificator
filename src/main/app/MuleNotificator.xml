@@ -16,70 +16,169 @@ http://www.mulesoft.org/schema/mule/objectstore http://www.mulesoft.org/schema/m
     </spring:beans>
     
 	<nio-http:connector name="notificator-nio-connector">
-        <receiver-threading-profile maxThreadsActive="${habitat.nio.maxThreadsActive}" maxThreadsIdle="${habitat.nio.maxThreadsIdle}"
-                                    threadTTL="${habitat.nio.threadTTL}" threadWaitTimeout="${habitat.nio.threadWaitTimeout}"
-                                    maxBufferSize="${habitat.nio.maxBufferSize}"/>
-        <dispatcher-threading-profile maxThreadsActive="${habitat.nio.maxThreadsActive}" maxThreadsIdle="${habitat.nio.maxThreadsIdle}"
-                                      threadTTL="${habitat.nio.threadTTL}" threadWaitTimeout="${habitat.nio.threadWaitTimeout}"
-                                      maxBufferSize="${habitat.nio.maxBufferSize}"/>
+        <receiver-threading-profile maxThreadsActive="${notificator.nio.maxThreadsActive}" maxThreadsIdle="${notificator.nio.maxThreadsIdle}"
+                                    threadTTL="${notificator.nio.threadTTL}" threadWaitTimeout="${notificator.nio.threadWaitTimeout}"
+                                    maxBufferSize="${notificator.nio.maxBufferSize}"/>
+        <dispatcher-threading-profile maxThreadsActive="${notificator.nio.maxThreadsActive}" maxThreadsIdle="${notificator.nio.maxThreadsIdle}"
+                                      threadTTL="${notificator.nio.threadTTL}" threadWaitTimeout="${notificator.nio.threadWaitTimeout}"
+                                      maxBufferSize="${notificator.nio.maxBufferSize}"/>
     </nio-http:connector>
-    <objectstore:config name="ObjectStore" persistent="true" doc:name="ObjectStore"/>
+    <objectstore:config name="ObjectStore"  partition="dg" doc:name="ObjectStore"/>
     
     <flow name="notificator-websocket" processingStrategy="synchronous" doc:name="notificator-websocket">
-         <nio-http:inbound-endpoint host="localhost" port="${http.port}" connector-ref="notificator-nio-connector" mimeType="application/json">
+    	
+         <nio-http:inbound-endpoint host="localhost" port="${http.port}" path="ws/notificator" connector-ref="notificator-nio-connector" mimeType="application/json">
             <not-filter>
                 <wildcard-filter pattern="/favicon.ico"/>
             </not-filter>
             <nio-http:websocket path="ws.notificator.channel" />
         </nio-http:inbound-endpoint>
-        <!--  <logger level="INFO" message="Websocket #[header:INBOUND:http.websocket.version]" />-->
-        <logger level="INFO" message="channel ID: #[header:INBOUND:nio.channel.id] sent: #[payload:java.lang.String]" doc:name="Logger"/>
+        <!--  <logger level="DEBUG" message="Websocket #[header:INBOUND:http.websocket.version]" />-->
+        <logger level="INFO" message="user socket ID: #[header:INBOUND:nio.channel.id] sent: #[payload:java.lang.String]" doc:name="Logger"/>
         <set-variable variableName="nioChannelId" value="#[message.inboundProperties['nio.channel.id']]" doc:name="Variable"/>
         
         <choice doc:name="Choice">
             <when expression="#[payload == &quot;/ws/notificator/channel&quot;]">
                 <http:response-builder doc:name="HTTP Response Builder" status="200"/>
-                
-                
             </when>
          	<otherwise>        
 		        <json:object-to-json-transformer doc:name="Object to JSON"/>
+		        <set-variable variableName="channel" value="#[json:channel]" doc:name="Variable" />
 		        <set-variable variableName="event" value="#[json:event]" doc:name="Variable" />
 		                
 		       	<choice doc:name="Choice">
 		            <when expression="#[flowVars['event'].contains('get-history')]">
-		                <flow-ref name="notificator-cache" doc:name="Flow Reference"/>
-		                
+		                <flow-ref name="notificator-cache" doc:name="Flow Reference"/>		                
 		            </when>
 		         	<otherwise>
-		         		<objectstore:store overwrite="true" key="#[header:INBOUND:nio.channel.id]" value-ref="#[payload]" config-ref="ObjectStore"   doc:name="ObjectStore"/>
-		                <nio-http:websocket-writer path="ws.notificator.channel"/>
+		         		<flow-ref name="deliver-channel-messages" doc:name="Flow Reference"/>
 		            </otherwise>
 		        </choice>   
              </otherwise>
         </choice>
        
     </flow>
+      
+    <flow name="notificator-connect" processingStrategy="synchronous" doc:name="notificator-connect">
+        <notification:custom-listener notification="org.mule.transport.nio.http.notifications.WebSocketNotification"
+                                      notificationListener="org.mule.transport.nio.http.notifications.WebSocketNotificationListener"
+                                      actionName="socket upgrade"/>
+        <set-variable variableName="nioChannelId" value="#[payload.channelId]" doc:name="Variable"/>
+        <!--<objectstore:store overwrite="true" key="#[flowVars['nioChannelId']]" value-ref="connected" config-ref="ObjectStore"   doc:name="ObjectStore"/>-->
+        <logger level="DEBUG" message="New subscriber: #[flowVars['nioChannelId']]" doc:name="Logger"/>
+    </flow>                                  
     
     <flow name="notificator-disconnect" processingStrategy="synchronous" doc:name="notificator-disconnect">
         <notification:custom-listener notification="org.mule.transport.nio.http.notifications.WebSocketNotification"
                                       notificationListener="org.mule.transport.nio.http.notifications.WebSocketNotificationListener"
                                       actionName="socket upgrade disconnect"/>
+        
         <set-variable variableName="nioChannelId" value="#[payload.channelId]" doc:name="Variable"/>
         <logger level="INFO" message="Unsubscribing to all topics for subscriberId #[flowVars['nioChannelId']]" doc:name="Logger"/>
-        <objectstore:retrieve key="#[flowVars['nioChannelId']]" config-ref="ObjectStore" doc:name="ObjectStore"/>
-        <set-payload value='{"id":"#[flowVars["nioChannelId"]]", "event":"leaves-channel", "data":#[json:data]}' doc:name="Set Payload"/>
-        <nio-http:websocket-writer path="ws.notificator.channel"/> 
-        <objectstore:remove config-ref="ObjectStore" key="#[flowVars['nioChannelId']]" doc:name="ObjectStore"/>
         
+        <objectstore:all-keys config-ref="ObjectStore" doc:name="ObjectStore"/>        
+        <foreach doc:name="For Each" collection="#[payload]">
+        	<set-variable value="#[payload.substring(0,payload.indexOf(':'))]" variableName="message.channel" doc:name="Variable" />
+        	<set-variable value="#[payload.substring(payload.indexOf(':') + 1, payload.length())]" variableName="message.nioChannelId" doc:name="Variable" />
+        	
+        	<choice doc:name="Choice">
+	            <when expression="#[flowVars['message.nioChannelId'].contains(flowVars['nioChannelId'].toString())]">
+	    			<objectstore:retrieve key="#[flowVars['message.channel'] + ':' + flowVars['nioChannelId']]" config-ref="ObjectStore" doc:name="ObjectStore"/>
+	    			<set-variable value="#[payload]" variableName="originalPayload" doc:name="Variable" />
+	    			<objectstore:remove config-ref="ObjectStore" key="#[flowVars['message.channel']+':'+flowVars['nioChannelId']]" doc:name="ObjectStore"/>
+	    			
+	    			<objectstore:all-keys config-ref="ObjectStore" doc:name="ObjectStore"/>	    			
+        			<foreach doc:name="For Each" collection="#[payload]">
+        				<set-variable value="#[payload.substring(0, payload.indexOf(':') - 1)]" variableName="message.channel.notify" doc:name="Variable" />
+        				<set-variable value="#[payload.substring(payload.indexOf(':') + 1, payload.length())]" variableName="message.nioChannelId.notify" doc:name="Variable" />
+        				
+        				<choice doc:name="Choice">
+				            <when expression="#[flowVars['message.channel'].contains(flowVars['message.channel.notify'])]">
+				    			<set-payload value="#[flowVars['originalPayload']]" doc:name="Set Payload"/>
+        						<set-payload value='{"id":"#[flowVars["nioChannelId"]]", "event":"leaves-channel", "data":#[json:data]}' doc:name="Set Payload"/>           
+			        			<nio-http:websocket-writer path="ws.notificator.channel" channelId="#[flowVars['message.nioChannelId.notify']]"/>
+				            </when>
+				         	<otherwise>
+				         		<logger level="DEBUG" message="message is not for requested channel" doc:name="Logger"/>
+				         	</otherwise>
+			         	</choice>        	
+         	
+        			</foreach>
+       			
+	            </when>
+	         	<otherwise>
+	         		<logger level="DEBUG" message="stored message is not from subscriber" doc:name="Logger"/>
+	         	</otherwise>
+         	</choice>        	
+        </foreach>
+        <catch-exception-strategy enableNotifications="false" doc:name="Catch Exception Strategy">
+            <logger message="exception" level="DEBUG" doc:name="Logger"/>
+        </catch-exception-strategy>
     </flow>
     
     
     <flow name="notificator-cache" doc:name="notificator-cache">
+    	<logger level="DEBUG" message="delivering message cache to requester" doc:name="Logger"/>
+    	
     	<objectstore:all-keys config-ref="ObjectStore" doc:name="ObjectStore"/>
         <foreach doc:name="For Each" collection="#[payload]">
-        	<objectstore:retrieve key="#[payload]" config-ref="ObjectStore" doc:name="ObjectStore"/>
-        	<nio-http:websocket-writer path="ws.notificator.channel" channelId="#[flowVars['nioChannelId']]"/>
+        	<set-variable value="#[payload.substring(0, payload.indexOf(':'))]" variableName="message.channel" doc:name="Variable" />
+        	<choice doc:name="Choice">
+	            <when expression="#[flowVars['message.channel'].contains(flowVars['channel'])]">	        
+        			<objectstore:retrieve key="#[payload]" config-ref="ObjectStore" doc:name="ObjectStore"/>
+        			<nio-http:websocket-writer path="ws.notificator.channel" channelId="#[flowVars['nioChannelId']]"/>
+        		</when>
+        		<otherwise>
+        			<logger level="DEBUG" message="message is not for requested channel" doc:name="Logger"/>
+	         	</otherwise>
+         	</choice>     
         </foreach>        
     </flow>
+    
+    <flow name="deliver-channel-messages" doc:name="deliver-channel-messages">
+    	<logger level="DEBUG" message="delivering message to channel participants" doc:name="Logger"/>
+    	
+    	<set-variable value="#[payload]" variableName="originalPayload" doc:name="Variable" />
+    	
+    	<objectstore:all-keys config-ref="ObjectStore" doc:name="ObjectStore"/>        
+        <foreach doc:name="For Each" collection="#[payload]">
+        	<set-variable value="#[payload.substring(0, payload.indexOf(':'))]" variableName="message.channel" doc:name="Variable" />
+        	<set-variable value="#[payload.substring(payload.indexOf(':') + 1, payload.length())]" variableName="message.nioChannelId" doc:name="Variable" />
+        	
+        	<choice doc:name="Choice">
+	            <when expression="#[flowVars['message.channel'].contains(flowVars['channel'])]">
+	            	<logger level="DEBUG" message="delivering message to #[flowVars['message.nioChannelId']]" doc:name="Logger"/>
+	            	<logger level="DEBUG" message="delivering payload  #[flowVars['originalPayload']]" doc:name="Logger"/>
+	    			<set-payload value="#[flowVars['originalPayload']]" doc:name="Set Payload"/>           
+        			<nio-http:websocket-writer path="ws.notificator.channel" channelId="#[flowVars['message.nioChannelId']]"/>
+	            </when>
+	         	<otherwise>
+	         		<logger level="DEBUG" message="message is not for requested channel" doc:name="Logger"/>
+	         	</otherwise>
+         	</choice>        	
+        </foreach>   
+           
+        <objectstore:store overwrite="true" key="#[flowVars['channel'] + ':' + flowVars['nioChannelId']]" value-ref="#[flowVars['originalPayload']]" config-ref="ObjectStore"   doc:name="ObjectStore"/>  
+    </flow>
+    
+    <flow name="MuleNotificatorFlow1" doc:name="MuleNotificatorFlow1">
+        <http:inbound-endpoint exchange-pattern="request-response" host="localhost" port="${http.port}" path="send_message" doc:name="HTTP"/>
+        <byte-array-to-string-transformer />
+        <choice >
+        	<when expression="#[message.inboundProperties['http.query.params']['channel'] != null]">
+        		<set-variable variableName="channel" value="#[message.inboundProperties['http.query.params']['channel']]" doc:name="Variable" />
+        		<set-payload value='{ "channel": "#[flowVars["channel"]]", "event":"notify-channel", "data":#[payload]}' doc:name="Set Payload"/>
+        		<logger level="INFO" message="broadcast message #[payload]" doc:name="Logger"/>
+                <flow-ref name="deliver-channel-messages" doc:name="Flow Reference"/>
+                <set-payload value='' doc:name="Set Payload"/>
+        		<http:response-builder doc:name="HTTP Response Builder" status="200"/>
+        	</when>
+        	<otherwise>
+        		<http:response-builder doc:name="HTTP Response Builder" status="404"/>
+        		<logger level="DEBUG" message="no channel param received" doc:name="Logger"/>
+        	</otherwise>
+        </choice>
+        
+    </flow>
+    
 </mule>
