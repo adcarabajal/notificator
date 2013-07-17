@@ -162,7 +162,7 @@ http://www.mulesoft.org/schema/mule/objectstore http://www.mulesoft.org/schema/m
     </flow>
     
     <flow name="MuleNotificatorFlow1" doc:name="MuleNotificatorFlow1">
-        <http:inbound-endpoint exchange-pattern="request-response" host="localhost" port="${http.port}" path="send_message" doc:name="HTTP"/>
+        <nio-http:inbound-endpoint exchange-pattern="request-response" host="localhost" port="${http.port}" path="send_message" mimeType="application/json" doc:name="HTTP"/>
         <byte-array-to-string-transformer />
         <choice >
         	<when expression="#[message.inboundProperties['http.query.params']['channel'] != null]">
@@ -171,7 +171,7 @@ http://www.mulesoft.org/schema/mule/objectstore http://www.mulesoft.org/schema/m
         		<logger level="INFO" message="broadcast message #[payload]" doc:name="Logger"/>
                 <flow-ref name="deliver-channel-messages" doc:name="Flow Reference"/>
                 <set-payload value='' doc:name="Set Payload"/>
-        		<http:response-builder doc:name="HTTP Response Builder" status="200"/>
+        		
         	</when>
         	<otherwise>
         		<http:response-builder doc:name="HTTP Response Builder" status="404"/>
